@@ -2,9 +2,9 @@
 
 ## What This Service Is
 
-EveriKobo has two backend services that talk to each other over HTTP. Praise
-owns the main Node.js backend which handles the mobile app, PostgreSQL, and
-Squad API. Opeyemi owns this Python FastAPI microservice which handles all AI
+EveriKobo has two backend services that talk to each other over HTTP. The
+main Node.js backend handles the mobile app, PostgreSQL, and
+Squad API. This Python FastAPI microservice handles all AI
 and ML work. The separation is intentional — it means the ML components can be
 updated, retrained, and deployed independently without risking the stability of
 the main application.
@@ -13,7 +13,7 @@ the main application.
 React Native App
       |
       v
-Node.js Backend (Praise) ──────> Python ML Microservice (Opeyemi)
+Node.js Backend ──────> Python ML Microservice
       |                                    |
       |                            POST /extract
       |                            POST /score
@@ -23,10 +23,10 @@ PostgreSQL (Neon)
 Squad API
 ```
 
-Praise is the orchestrator. He calls this microservice when he needs AI
+The Node.js backend is the orchestrator. It calls this microservice when it needs AI
 intelligence, uses the results to make product decisions, and stores the
-outcomes in PostgreSQL. He does not need to understand the internals of any
-endpoint — he only needs to know what to send and what to do with what comes
+outcomes in PostgreSQL. It does not need to understand the internals of any
+endpoint — it only needs to know what to send and what to do with what comes
 back.
 
 ---
@@ -50,10 +50,10 @@ GEMINI_API_KEY=your_gemini_api_key_here
 PORT=8000
 ```
 
-Praise needs one environment variable on his Node.js side:
+The Node.js backend needs one environment variable on his Node.js side:
 
 ```bash
-# In Praise's .env
+# In the Node.js .env
 ML_SERVICE_URL=http://localhost:8000          # Local development
 ML_SERVICE_URL=https://your-app.railway.app  # Production
 ```
@@ -62,11 +62,11 @@ ML_SERVICE_URL=https://your-app.railway.app  # Production
 
 ## The Three Endpoints at a Glance
 
-The table below gives Praise a quick orientation before he reads the detailed
-sections. The key column is "What Praise Does With It" — that is the only part
-he needs to act on.
+The table below gives a quick orientation before reading the detailed
+sections. The key column is "Client Action" — that is the only part
+the client needs to act on.
 
-| Endpoint | What It Does | What Praise Does With It |
+| Endpoint | What It Does | Client Action |
 |---|---|---|
 | `POST /extract` | Reads a ledger photo with Gemini Vision, returns structured JSON | Saves the returned transactions to PostgreSQL |
 | `POST /score` | Computes EveriScore from transaction history using NumPy | Multiplies the returned `everiscore` by the fraud penalty to get the final score |
@@ -74,9 +74,9 @@ he needs to act on.
 
 ---
 
-## How Praise Puts It All Together
+## How It All Comes Together
 
-This is the most important section for Praise to read because it shows how the
+This is an important section to read because it shows how the
 three endpoints connect into a single scoring flow. The key engineering insight
 is that `/score` and `/fraud-check` run **in parallel** using `Promise.all`
 because they use different data and neither depends on the other's result. This
@@ -84,7 +84,7 @@ cuts the total response time roughly in half compared to calling them one after
 the other.
 
 ```javascript
-// This is the main function Praise calls when the trader
+// This is the main function the Node.js backend calls when the trader
 // taps "Check My Score" in the mobile app.
 // It orchestrates both ML endpoints and returns the final result.
 async function computeFinalEveriScore(traderId) {
@@ -166,7 +166,7 @@ async function computeFinalEveriScore(traderId) {
 
 Neither endpoint should ever block the trader from getting a response. If this
 microservice is temporarily unavailable — because Railway had a cold start, a
-network hiccup, or a crash — Praise's Node.js backend should fall back to safe
+network hiccup, or a crash — the Node.js backend should fall back to safe
 defaults rather than showing the trader an error screen.
 
 ```javascript
@@ -238,7 +238,7 @@ not a compromise. It is deterministic, auditable, and regulator-friendly.
 
 ---
 
-## What Praise Sends
+## Request Payload
 
 ```json
 {
@@ -253,23 +253,23 @@ not a compromise. It is deterministic, auditable, and regulator-friendly.
 ```
 
 `daily_revenues` is a chronologically ordered array of total daily sales
-revenue. Praise builds it with a GROUP BY query on the transactions table,
+revenue. The client builds it with a GROUP BY query on the transactions table,
 ordered oldest to newest, because the trend signal depends on the direction
 of change over time.
 
 `total_cogs` is the sum of Cost of Goods expenses only — wholesale inventory
-purchases, not overhead. Praise filters WHERE category = 'COST_OF_GOODS'.
+purchases, not overhead. The client filters WHERE category = 'COST_OF_GOODS'.
 
 `total_expenses` is the sum of ALL expenses including both COGS and overhead.
-Praise gets this with a broader SUM() across all expense records.
+This is obtained with a broader SUM() across all expense records.
 
-`consistency_ratio` is computed by Praise on the Node.js side before the call,
-because it requires date arithmetic on the upload history that Praise already
+`consistency_ratio` is computed on the Node.js side before the call,
+because it requires date arithmetic on the upload history that the Node.js backend already
 has in memory. The formula is: unique upload days ÷ calendar span from first
 to last upload. A trader who uploaded on 21 out of 34 calendar days has a
 consistency ratio of 0.618.
 
-Here is exactly how Praise computes it:
+Here is exactly how it is computed:
 
 ```javascript
 async function buildScorePayload(traderId) {
@@ -329,7 +329,7 @@ async function buildScorePayload(traderId) {
 }
 ```
 
-**On the size of daily_revenues:** Praise sends one number per upload day.
+**On the size of daily_revenues:** The payload includes one number per upload day.
 At 30 days that is 30 numbers. At 365 days that is 365 numbers. Each number
 is 8 bytes as a float, so a full year of history is under 3 kilobytes — well
 within the comfortable limit of any HTTP request. This is never a performance
@@ -357,20 +357,20 @@ concern at realistic scale.
 }
 ```
 
-`everiscore` is the base score **before** the fraud penalty. Praise multiplies
+`everiscore` is the base score **before** the fraud penalty. The Node.js backend multiplies
 this by `penalty_multiplier` from `/fraud-check` to get the final score.
 
-`tier` is the **pre-fraud** tier. Praise must recompute the tier after applying
+`tier` is the **pre-fraud** tier. The client must recompute the tier after applying
 the penalty — never display this value directly in the UI.
 
-`tax_status` controls what Praise shows the trader: a "Tax Exempt" badge for
+`tax_status` controls what the app shows the trader: a "Tax Exempt" badge for
 `NANO_EXEMPT`, or a prompt to generate a tax report for `TAXABLE_1PCT`.
 
 `signals` exposes the four individual scores so the mobile app can show the
 trader a breakdown of what drove their EveriScore, helping them understand
 what behaviour to improve.
 
-`eligible` is false when `days_tracked` is below 30. Praise should skip the
+`eligible` is false when `days_tracked` is below 30. The client should skip the
 `/fraud-check` call entirely when this is false and show the trader a progress
 indicator instead.
 
@@ -437,7 +437,7 @@ def compute_trend_score(daily_revenues: list) -> float:
 
 ### Signal 3 — Consistency Score (20% weight)
 
-This is the `consistency_ratio` Praise pre-computed and passed in the request
+This is the `consistency_ratio` pre-computed and passed in the request
 body. No additional calculation is needed — the value is used directly as the
 signal score. A trader who uploads every single day scores 1.0. A trader who
 uploaded on 15 of 30 days scores 0.5.
@@ -509,7 +509,7 @@ def compute_everiscore(
     )
 
     # ── TIER CLASSIFICATION ───────────────────────────────────────────────
-    # This is the PRE-FRAUD tier. Praise recomputes after applying
+    # This is the PRE-FRAUD tier. The client recomputes after applying
     # the penalty multiplier from /fraud-check.
     tier = (
         "GREEN"  if base_score >= 0.70
@@ -544,7 +544,7 @@ def compute_everiscore(
 
 This endpoint runs three checks on a trader's transaction history to detect
 patterns that suggest manipulation. It returns a `penalty_multiplier` between
-0 and 1 that Praise applies to the base EveriScore. A multiplier of 1.0 means
+0 and 1 that the Node.js backend applies to the base EveriScore. A multiplier of 1.0 means
 no fraud was detected and no penalty applies. A multiplier of 0.50 means a
 significant anomaly was detected and the score is halved. It is mathematically
 impossible for fraud attempts to improve a trader's score — every flag makes
@@ -552,7 +552,7 @@ the score worse.
 
 ---
 
-## What Praise Sends
+## Request Payload
 
 ```json
 {
@@ -576,7 +576,7 @@ the score worse.
 
 `upload_history` contains both the date the trader *claims* the transaction
 happened (`transaction_date`) and the server timestamp of when the record was
-actually received (`uploaded_at`). Praise gets `uploaded_at` from the
+actually received (`uploaded_at`). The Node.js backend gets `uploaded_at` from the
 `created_at` column that PostgreSQL sets automatically on INSERT — **never
 from the mobile client**. If the client can send the timestamp, the backdating
 check is trivially defeated.
@@ -649,7 +649,7 @@ async function buildFraudCheckPayload(traderId) {
 }
 ```
 
-`penalty_multiplier` is the only field Praise needs to act on. Multiply it
+`penalty_multiplier` is the only field the client needs to act on. Multiply it
 against `everiscore` from `/score` to get the final adjusted score.
 
 ---

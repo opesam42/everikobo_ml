@@ -1,10 +1,10 @@
 # EveriKobo ML Microservice — API Reference
 
-This document provides everything you (Praise) need to interact with the Python ML Microservice from your Node.js backend. 
+This document provides everything needed to interact with the Python ML Microservice from the Node.js backend. 
 
 ## Base URL
 - **Local:** `http://localhost:8000`
-- **Production:** *(Set via your `ML_SERVICE_URL` environment variable)*
+- **Production:** *(Set via the `ML_SERVICE_URL` environment variable)*
 
 ---
 
@@ -46,7 +46,7 @@ Computes the trader's EveriScore using deterministic, rule-based logic to ensure
   }
 }
 ```
-**What you do with it:**
+**Client Action:**
 - Store the `everiscore` and `signals`.
 - **Wait** for the `/fraud-check` response to apply the `penalty_multiplier` before finalizing the `tier`.
 
@@ -72,7 +72,7 @@ Runs anomaly detection on transaction patterns to detect manipulation or backdat
 }
 ```
 **Notes on Payload:**
-- `trader_category`: Pass whatever string you have (e.g., "Food Vendor"). **The Python side automatically normalizes it**, so you don't need to format it before sending.
+- `trader_category`: Pass whatever string is available (e.g., "Food Vendor"). **The Python side automatically normalizes it**, so there is no need to format it before sending.
 - `uploaded_at`: Must come from PostgreSQL `created_at` (server time), never from the mobile client.
 
 ### Response
@@ -93,22 +93,22 @@ Runs anomaly detection on transaction patterns to detect manipulation or backdat
   "penalty_multiplier": 0.50
 }
 ```
-**What you do with it:**
+**Client Action:**
 - Multiply the `penalty_multiplier` by the `everiscore` from the `/score` endpoint to get the final score.
 - Recompute the final tier based on the final score.
 
 ---
 
 ## 3. Managing Baselines (`/baselines`)
-The fraud detection system uses River online learning to learn market conditions over time. Since Railway/Python containers restart, you need to back up and restore this memory using your PostgreSQL database.
+The fraud detection system uses River online learning to learn market conditions over time. Since Railway/Python containers restart, you need to back up and restore this memory using the PostgreSQL database.
 
 ### `GET /baselines`
 Fetches the current baseline memory state.
-**Action for Praise:** Call this via a CRON job (e.g., every 6 hours) and save the JSON response to a `baselines` table in PostgreSQL.
+**Client Action:** Call this via a CRON job (e.g., every 6 hours) and save the JSON response to a `baselines` table in PostgreSQL.
 
 ### `POST /baselines`
 Restores the baseline memory state.
-**Action for Praise:** Call this whenever your Node.js server detects the Python service booting up (or during your own startup sequence) and push the last saved baseline state from PostgreSQL.
+**Client Action:** Call this whenever the Node.js server detects the Python service booting up (or during the startup sequence) and push the last saved baseline state from PostgreSQL.
 
 **Payload:**
 ```json
