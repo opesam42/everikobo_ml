@@ -4,7 +4,11 @@ This document provides everything needed to interact with the Python ML Microser
 
 ## Base URL
 - **Local:** `http://localhost:8000`
-- **Production:** *(Set via the `ML_SERVICE_URL` environment variable)*
+- **Production:** `https://everikoboml-production.up.railway.app` *(Set via the `ML_SERVICE_URL` environment variable)*
+
+## Authentication
+All endpoints **except** `/health` require an API key to access. You must include the following header in your HTTP requests:
+- `X-API-Key`: *(Set via the `EVERIKOBO_API_KEY` environment variable in production, or use `dev_api_key_123` for local testing)*
 
 ---
 

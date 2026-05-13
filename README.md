@@ -55,7 +55,7 @@ The Node.js backend needs one environment variable on his Node.js side:
 ```bash
 # In the Node.js .env
 ML_SERVICE_URL=http://localhost:8000          # Local development
-ML_SERVICE_URL=https://your-app.railway.app  # Production
+ML_SERVICE_URL=https://everikoboml-production.up.railway.app  # Production
 ```
 
 ---

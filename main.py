@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
+from auth.api_key import verify_api_key
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 
@@ -28,7 +29,7 @@ app.add_middleware(
 def health_check():
     return {"status": "ok"}
 
-@app.post("/score", response_model=ScoreResponse)
+@app.post("/score", response_model=ScoreResponse, dependencies=[Depends(verify_api_key)])
 def compute_score(request: ScoreRequest):
     result = score_service.compute_everiscore(
         trader_id=request.trader_id,
@@ -41,7 +42,7 @@ def compute_score(request: ScoreRequest):
     )
     return ScoreResponse(**result)
 
-@app.post("/fraud-check", response_model=FraudCheckResponse)
+@app.post("/fraud-check", response_model=FraudCheckResponse, dependencies=[Depends(verify_api_key)])
 def check_fraud(request: FraudCheckRequest):
     # 1. Revenue Spike Detection
     spike_result = fraud_service.detect_revenue_anomaly(request.daily_revenues)
@@ -85,12 +86,12 @@ def check_fraud(request: FraudCheckRequest):
         penalty_multiplier=multiplier
     )
 
-@app.get("/baselines", response_model=BaselineDumpResponse)
+@app.get("/baselines", response_model=BaselineDumpResponse, dependencies=[Depends(verify_api_key)])
 def get_baselines():
     """Returns the serialized state of River baselines for PostgreSQL persistence."""
     return {"baselines": repo.dump_state()}
 
-@app.post("/baselines", response_model=dict)
+@app.post("/baselines", response_model=dict, dependencies=[Depends(verify_api_key)])
 def restore_baselines(request: BaselineDumpResponse):
     """Restores River baselines from Node.js on startup."""
     state_list = [s.model_dump() for s in request.baselines]

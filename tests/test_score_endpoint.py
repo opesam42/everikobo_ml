@@ -1,7 +1,12 @@
 from fastapi.testclient import TestClient
 from main import app
+from auth.api_key import verify_api_key
 
 client = TestClient(app)
+
+# Override the API key dependency so tests always pass regardless of the .env file
+app.dependency_overrides[verify_api_key] = lambda: "test_key"
+
 
 def test_score_endpoint_ineligible():
     payload = {
