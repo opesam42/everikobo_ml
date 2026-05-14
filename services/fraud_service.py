@@ -101,18 +101,23 @@ def group_into_sessions(upload_history: list, gap_minutes: int = 10) -> list:
     if not upload_history:
         return []
     
-    # Sort by uploaded_at just in case
+    def _parse_dt(ts: str) -> datetime:
+        try:
+            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            return datetime.min
+
     sorted_history = sorted(
-        upload_history, 
-        key=lambda x: datetime.fromisoformat(x.uploaded_at.replace("Z", "+00:00"))
+        upload_history,
+        key=lambda x: _parse_dt(x.uploaded_at)
     )
     
     sessions = []
     current_session = [sorted_history[0]]
     
     for record in sorted_history[1:]:
-        prev_time = datetime.fromisoformat(current_session[-1].uploaded_at.replace("Z", "+00:00"))
-        curr_time = datetime.fromisoformat(record.uploaded_at.replace("Z", "+00:00"))
+        prev_time = _parse_dt(current_session[-1].uploaded_at)
+        curr_time = _parse_dt(record.uploaded_at)
         
         delta = (curr_time - prev_time).total_seconds() / 60.0
         if delta <= gap_minutes:
@@ -142,9 +147,11 @@ def check_timestamp_integrity(upload_history: list) -> dict:
             })
 
         for record in session:
-            # Handle possible trailing 'Z' which datetime.fromisoformat doesn't like in python < 3.11 without replace
-            claimed = datetime.fromisoformat(record.transaction_date.split('T')[0])
-            uploaded = datetime.fromisoformat(record.uploaded_at.replace('Z', '+00:00'))
+            try:
+                claimed = datetime.fromisoformat(record.transaction_date.split('T')[0])
+                uploaded = datetime.fromisoformat(record.uploaded_at.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                continue
             
             delta_days = (uploaded.date() - claimed.date()).days
 

@@ -1,6 +1,9 @@
 import numpy as np
 
 def compute_volatility_score(daily_revenues: list) -> float:
+    if not daily_revenues:
+        return 0.0
+
     arr = np.array(daily_revenues)
     mean = np.mean(arr)
 
@@ -75,7 +78,7 @@ def compute_everiscore(
         gross_margin_score * 0.20
     )
 
-    annualised_turnover = np.mean(daily_revenues) * 365
+    annualised_turnover = (np.mean(daily_revenues) if daily_revenues else 0.0) * 365
     tax_status = (
         "NANO_EXEMPT" if annualised_turnover <= 12_000_000
         else "TAXABLE_1PCT"
