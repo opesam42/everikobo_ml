@@ -101,7 +101,7 @@ class MatchRequest(BaseModel):
     candidate_pool: List[Seeker]
 
 class RankedCandidate(BaseModel):
-    id: str
+    id: Optional[str] = None
     match_score: float
     method: str
     # Keep the rest of the seeker data dynamically, or just specific fields if needed
