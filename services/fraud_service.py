@@ -173,7 +173,61 @@ def check_timestamp_integrity(upload_history: list) -> dict:
         "passed": len(flags) == 0
     }
 
-def compute_penalty_multiplier(spike_result: dict, expense_result: dict, integrity_result: dict) -> float:
+def check_squad_velocity_triangulation(
+    notebook_revenue_daily_avg: float,
+    squad_credit_daily_avg: float,
+    days_with_squad_data: int
+) -> dict:
+
+    # Need at least 7 days of Squad data to make a meaningful comparison.
+    # Before that, skip the check entirely — do not penalise traders
+    # who have just started using digital payments.
+    if days_with_squad_data < 7:
+        return {
+            "checked": False,
+            "reason": "insufficient_squad_history",
+            "penalty": 1.0
+        }
+
+    if notebook_revenue_daily_avg == 0:
+        return {"checked": False, "reason": "zero_notebook_revenue", "penalty": 1.0}
+
+    # Deviation: how far does Squad data diverge from notebook claims?
+    # We expect Squad to be LOWER than notebook because most informal
+    # traders still receive significant cash — not every naira goes
+    # through digital rails. So we only flag upward notebook inflation.
+    deviation = (notebook_revenue_daily_avg - squad_credit_daily_avg) / notebook_revenue_daily_avg
+
+    # A trader recording ₦20,000 in their notebook but only receiving
+    # ₦2,000 through Squad has a 90% deviation. That is suspicious.
+    # We set the threshold at 85% because we expect some cash sales.
+    # Below 85% deviation means Squad adoption is reasonable for
+    # the informal market context.
+    if deviation > 0.85:
+        return {
+            "checked": True,
+            "deviation": round(deviation, 3),
+            "anomaly": True,
+            "severity": "HIGH",
+            "penalty": 0.70  # 30% penalty — less severe than revenue spike
+        }
+    elif deviation > 0.70:
+        return {
+            "checked": True,
+            "deviation": round(deviation, 3),
+            "anomaly": True,
+            "severity": "MEDIUM",
+            "penalty": 0.85
+        }
+    else:
+        return {
+            "checked": True,
+            "deviation": round(deviation, 3),
+            "anomaly": False,
+            "penalty": 1.0  # No penalty — data is consistent
+        }
+
+def compute_penalty_multiplier(spike_result: dict, expense_result: dict, integrity_result: dict, squad_result: dict = None) -> float:
     multiplier = 1.0
 
     if spike_result.get("anomaly") or spike_result.get("spike"):
@@ -183,5 +237,8 @@ def compute_penalty_multiplier(spike_result: dict, expense_result: dict, integri
         multiplier *= 0.60
 
     multiplier *= integrity_result["integrity_score"]
+    
+    if squad_result and squad_result.get("checked"):
+        multiplier *= squad_result.get("penalty", 1.0)
 
     return round(multiplier, 3)

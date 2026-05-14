@@ -281,19 +281,49 @@ def check_timestamp_integrity(upload_history: list, trader: dict) -> dict:
 
 ---
 
+---
+
+## Check 4 — Squad Velocity Triangulation
+
+Cross-references self-reported notebook data with actual digital payments received via Squad to detect upward notebook inflation.
+
+```python
+def check_squad_velocity_triangulation(notebook_revenue_daily_avg: float, squad_credit_daily_avg: float, days_with_squad_data: int) -> dict:
+    if days_with_squad_data < 7:
+        return {"checked": False, "reason": "insufficient_squad_history", "penalty": 1.0}
+
+    if notebook_revenue_daily_avg == 0:
+        return {"checked": False, "reason": "zero_notebook_revenue", "penalty": 1.0}
+
+    deviation = (notebook_revenue_daily_avg - squad_credit_daily_avg) / notebook_revenue_daily_avg
+
+    if deviation > 0.85:
+        return {"checked": True, "deviation": round(deviation, 3), "anomaly": True, "severity": "HIGH", "penalty": 0.70}
+    elif deviation > 0.70:
+        return {"checked": True, "deviation": round(deviation, 3), "anomaly": True, "severity": "MEDIUM", "penalty": 0.85}
+    else:
+        return {"checked": True, "deviation": round(deviation, 3), "anomaly": False, "penalty": 1.0}
+```
+
+---
+
 ## Penalty Multiplier
 
 ```python
 def compute_penalty_multiplier(spike_result: dict, expense_result: dict,
-                               integrity_result: dict) -> float:
+                               integrity_result: dict, squad_result: dict = None) -> float:
     multiplier = 1.0
     if spike_result.get("anomaly") or spike_result.get("spike"):
         multiplier *= 0.50
     if expense_result.get("anomaly"):
         multiplier *= 0.60
     multiplier *= integrity_result["integrity_score"]
+    
+    if squad_result and squad_result.get("checked"):
+        multiplier *= squad_result.get("penalty", 1.0)
+        
     return round(multiplier, 3)
 ```
 
-All three checks triggered simultaneously: `1.0 × 0.50 × 0.60 × 0.55 = 0.165`.
-Final score would be 16.5% of what it would have been without fraud.
+All four checks triggered simultaneously: `1.0 × 0.50 × 0.60 × 0.55 × 0.70 = 0.115`.
+Final score would be 11.5% of what it would have been without fraud.

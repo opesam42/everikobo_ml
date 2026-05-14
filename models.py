@@ -42,6 +42,9 @@ class FraudCheckRequest(BaseModel):
     total_expenses: float
     trader_category: str = "general_trade"
     upload_history: List[UploadRecord]
+    notebook_revenue_daily_avg: Optional[float] = 0.0
+    squad_credit_daily_avg: Optional[float] = 0.0
+    days_with_squad_data: Optional[int] = 0
 
 class FraudFlag(BaseModel):
     type: str

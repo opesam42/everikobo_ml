@@ -72,12 +72,16 @@ Runs anomaly detection on transaction patterns to detect manipulation or backdat
       "transaction_date": "2026-04-13",
       "uploaded_at": "2026-04-13T19:45:00Z"
     }
-  ]
+  ],
+  "notebook_revenue_daily_avg": 45000,
+  "squad_credit_daily_avg": 2000,
+  "days_with_squad_data": 10
 }
 ```
 **Notes on Payload:**
 - `trader_category`: Pass whatever string is available (e.g., "Food Vendor"). **The Python side automatically normalizes it**, so there is no need to format it before sending.
 - `uploaded_at`: Must come from PostgreSQL `created_at` (server time), never from the mobile client.
+- `notebook_revenue_daily_avg` / `squad_credit_daily_avg`: Used to calculate Squad Velocity Triangulation. Ensure `squad_credit_daily_avg` only aggregates 'CREDIT' transactions.
 
 ### Response
 ```json

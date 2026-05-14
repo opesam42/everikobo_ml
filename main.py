@@ -70,11 +70,19 @@ def check_fraud(request: FraudCheckRequest):
     # 3. Timestamp Integrity
     integrity_result = fraud_service.check_timestamp_integrity(request.upload_history)
     
+    # 4. Squad Velocity Triangulation
+    squad_result = fraud_service.check_squad_velocity_triangulation(
+        notebook_revenue_daily_avg=request.notebook_revenue_daily_avg,
+        squad_credit_daily_avg=request.squad_credit_daily_avg,
+        days_with_squad_data=request.days_with_squad_data
+    )
+    
     # Compute Final Multiplier
     multiplier = fraud_service.compute_penalty_multiplier(
         spike_result=spike_result,
         expense_result=expense_result,
-        integrity_result=integrity_result
+        integrity_result=integrity_result,
+        squad_result=squad_result
     )
     
     # Assemble Fraud Flags
@@ -88,6 +96,13 @@ def check_fraud(request: FraudCheckRequest):
         
     for f in integrity_result.get("flags", []):
         flags.append(f)
+        
+    if squad_result.get("anomaly"):
+        flags.append({
+            "type": "squad_inflation",
+            "severity": squad_result.get("severity", "MEDIUM"),
+            "anomaly_score": squad_result.get("deviation")
+        })
         
     return FraudCheckResponse(
         trader_id=request.trader_id,
