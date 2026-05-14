@@ -8,8 +8,8 @@ class BaselineRepository:
     def _init_category(self, category: str):
         if category not in self.category_baselines:
             self.category_baselines[category] = {
-                "mean": stats.EWMean(alpha=0.1),
-                "var": stats.EWVar(alpha=0.1),
+                "mean": stats.EWMean(fading_factor=0.1),
+                "var": stats.EWVar(fading_factor=0.1),
                 "detector": drift.ADWIN()
             }
             
@@ -31,8 +31,8 @@ class BaselineRepository:
             print(f"Market drift detected in {category} — resetting baseline")
             # Reset the baseline because market conditions have fundamentally changed
             self.category_baselines[category] = {
-                "mean": stats.EWMean(alpha=0.1),
-                "var": stats.EWVar(alpha=0.1),
+                "mean": stats.EWMean(fading_factor=0.1),
+                "var": stats.EWVar(fading_factor=0.1),
                 "detector": drift.ADWIN()
             }
 
@@ -64,17 +64,15 @@ class BaselineRepository:
             b = self.category_baselines[cat]
             
             mean_val = s.get("mean", 0.0)
-            var_val = s.get("variance", 0.0)
             
-            # Manually inject state back into River EW objects
-            # EW objects adapt very quickly (alpha=0.1), so approximate restoration is fine.
-            if hasattr(b["mean"], 'mean'):
-                b["mean"].mean = mean_val
-                
-            if hasattr(b["var"], 'mean') and hasattr(b["var"].mean, 'mean'):
-                b["var"].mean.mean = mean_val
-            if hasattr(b["var"], 'variance'):
-                b["var"].variance = var_val
+            # Re-initialize to clear any existing state
+            b["mean"] = stats.EWMean(fading_factor=0.1)
+            b["var"] = stats.EWVar(fading_factor=0.1)
+            
+            # The first update to an EW stat sets its initial value exactly.
+            # We use the public API instead of reflection since River internals vary.
+            b["mean"].update(mean_val)
+            b["var"].update(mean_val)
 
 # Singleton instance for the app to use
 repo = BaselineRepository()
