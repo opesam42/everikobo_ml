@@ -26,6 +26,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# @app.on_event("startup")
+# async def restore_on_startup():
+#     # Fetch the last saved snapshot from PostgreSQL
+#     snapshot = await db.fetch_one(
+#         "SELECT snapshot FROM baseline_snapshots ORDER BY saved_at DESC LIMIT 1"
+#     )
+#     if snapshot:
+#         restore_baselines({"snapshot": snapshot["snapshot"]})
+#         print("Baselines restored from database")
+#     else:
+#         print("No baseline snapshot found — starting fresh")
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
