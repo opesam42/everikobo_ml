@@ -162,3 +162,86 @@ async function computeFinalEveriScore(traderId) {
   // 5. Save to DB and return to client...
 }
 ```
+
+---
+
+## 4. `POST /match`
+Ranks a pool of candidates for a WorkConnect job post using rule-based scoring (or an ML model after enough data is collected).
+
+### Request Payload
+```json
+{
+  "job_post": {
+    "lga": "Kosofe",
+    "skill_needed": "delivery",
+    "skills_needed": ["delivery", "logistics"],
+    "max_rate": 3500,
+    "trader_everiscore": 0.73
+  },
+  "trader": {
+    "id": "uuid-string",
+    "lga": "Kosofe"
+  },
+  "candidate_pool": [
+    {
+      "id": "uuid-string",
+      "lga": "Kosofe",
+      "skills": ["delivery", "inventory"],
+      "daily_rate": 3000,
+      "available": true,
+      "avg_rating": 0.85,
+      "jobs_completed": 12
+    }
+  ]
+}
+```
+
+### Response
+```json
+{
+  "ranked_candidates": [
+    {
+      "id": "uuid-string",
+      "match_score": 0.823,
+      "skill_overlap": 0.9,
+      "rate_compatibility": 0.86,
+      "method": "ml_blend"
+    }
+  ],
+  "total_candidates": 1,
+  "method_used": "ml_blend"
+}
+```
+
+---
+
+## 5. `POST /match/feedback`
+Records the outcome of a match (success or failure) to incrementally train the matching model for future jobs.
+
+### Request Payload
+```json
+{
+  "seeker_id": "uuid-string",
+  "job_post": {
+    "lga": "Kosofe",
+    "skill_needed": "delivery",
+    "max_rate": 3500,
+    "trader_everiscore": 0.73
+  },
+  "seeker": {
+    "lga": "Kosofe",
+    "skills": ["delivery"],
+    "daily_rate": 3000
+  },
+  "outcome": true
+}
+```
+
+### Response
+```json
+{
+  "status": "learned",
+  "total_matches_learned": 51,
+  "ml_active": true
+}
+```

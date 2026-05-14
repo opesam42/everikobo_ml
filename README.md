@@ -14,7 +14,7 @@ React Native App
       v
 Node.js Backend ──────> Python ML Microservice
       |                          |
-      |                  POST /extract
+
       |                  POST /score
       |                  POST /fraud-check
       |                  POST /match
@@ -43,7 +43,6 @@ uvicorn main:app --reload --port 8000
 
 ```bash
 # .env.example
-GEMINI_API_KEY=your_gemini_api_key_here
 EVERIKOBO_API_KEY=your_shared_api_key_here
 PORT=8000
 ```
@@ -90,7 +89,7 @@ send the `X-API-Key` header on every request.
 
 | Endpoint | What It Does | Client Action |
 |---|---|---|
-| `POST /extract` | Reads ledger photo with Gemini Vision | Save returned transactions to PostgreSQL |
+
 | `POST /score` | Computes EveriScore from transaction history | Multiply returned `everiscore` by fraud penalty |
 | `POST /fraud-check` | Runs ML anomaly detection | Apply `penalty_multiplier` to base score |
 | `POST /match` | Ranks job seekers for a WorkConnect post | Display top candidates in UI |

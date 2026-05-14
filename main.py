@@ -6,9 +6,10 @@ from typing import List
 from models import (
     ScoreRequest, ScoreResponse,
     FraudCheckRequest, FraudCheckResponse, FraudFlag,
-    BaselineState, BaselineDumpResponse
+    BaselineState, BaselineDumpResponse,
+    MatchRequest, MatchResponse, MatchFeedbackRequest, MatchFeedbackResponse
 )
-from services import score_service, fraud_service
+from services import score_service, fraud_service, match_service
 from repository.baseline_repo import repo
 
 app = FastAPI(
@@ -97,3 +98,21 @@ def restore_baselines(request: BaselineDumpResponse):
     state_list = [s.model_dump() for s in request.baselines]
     repo.restore_state(state_list)
     return {"status": "ok", "message": "Baselines restored successfully."}
+
+@app.post("/match", response_model=MatchResponse, dependencies=[Depends(verify_api_key)])
+def match_candidates(request: MatchRequest):
+    result = match_service.rank_candidates(
+        job_post=request.job_post,
+        candidate_pool=request.candidate_pool,
+        trader_id=request.trader.id
+    )
+    return MatchResponse(**result)
+
+@app.post("/match/feedback", response_model=MatchFeedbackResponse, dependencies=[Depends(verify_api_key)])
+def match_feedback(request: MatchFeedbackRequest):
+    result = match_service.record_match_outcome(
+        seeker=request.seeker,
+        job_post=request.job_post,
+        outcome=request.outcome
+    )
+    return MatchFeedbackResponse(**result)

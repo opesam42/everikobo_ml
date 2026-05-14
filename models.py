@@ -71,3 +71,59 @@ class BaselineState(BaseModel):
 
 class BaselineDumpResponse(BaseModel):
     baselines: List[BaselineState]
+
+
+# --- Match Models ---
+
+class JobPost(BaseModel):
+    lga: str
+    skill_needed: str
+    skills_needed: Optional[List[str]] = None
+    max_rate: float
+    trader_everiscore: float
+
+class Trader(BaseModel):
+    id: str
+    lga: str
+
+class Seeker(BaseModel):
+    id: Optional[str] = None
+    lga: str
+    skills: List[str]
+    daily_rate: float
+    available: Optional[bool] = True
+    avg_rating: Optional[float] = 0.5
+    jobs_completed: Optional[int] = 0
+
+class MatchRequest(BaseModel):
+    job_post: JobPost
+    trader: Trader
+    candidate_pool: List[Seeker]
+
+class RankedCandidate(BaseModel):
+    id: str
+    match_score: float
+    method: str
+    # Keep the rest of the seeker data dynamically, or just specific fields if needed
+    lga: str
+    skills: List[str]
+    daily_rate: float
+    available: Optional[bool] = True
+    avg_rating: Optional[float] = 0.5
+    jobs_completed: Optional[int] = 0
+
+class MatchResponse(BaseModel):
+    ranked_candidates: List[RankedCandidate]
+    total_candidates: int
+    method_used: str
+
+class MatchFeedbackRequest(BaseModel):
+    seeker_id: str
+    job_post: JobPost
+    seeker: Seeker
+    outcome: bool
+
+class MatchFeedbackResponse(BaseModel):
+    status: str
+    total_matches_learned: int
+    ml_active: bool
