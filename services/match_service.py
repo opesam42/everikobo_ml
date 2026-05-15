@@ -1,6 +1,7 @@
 from river import linear_model, preprocessing, compose
 from collections import defaultdict
 from models import JobPost, Seeker, RankedCandidate
+from logger import logger
 
 # Online learning pipeline — updates incrementally with each outcome
 match_model = compose.Pipeline(
@@ -40,6 +41,7 @@ def score_candidate_rules(seeker: Seeker, job_post: JobPost) -> float:
     )
 
 def rank_candidates(job_post: JobPost, candidate_pool: list[Seeker], trader_id: str) -> dict:
+    """ Rank eligible candidates using rules only or a rules-ML blend depending on training data available """
     eligible = apply_hard_filters(job_post, candidate_pool)
 
     if not eligible:
@@ -50,23 +52,33 @@ def rank_candidates(job_post: JobPost, candidate_pool: list[Seeker], trader_id: 
 
     for seeker in eligible:
         if use_ml:
-            features   = extract_match_features(seeker, job_post)
-            ml_score   = match_model.predict_proba_one(features).get(True, 0.5)
-            rule_score = score_candidate_rules(seeker, job_post)
-            # Blend ML prediction with rule-based score for stability
-            final = 0.6 * ml_score + 0.4 * rule_score
-            method = "ml_blend"
+            try:
+                features   = extract_match_features(seeker, job_post)
+                ml_score   = match_model.predict_proba_one(features).get(True, 0.5)
+                rule_score = score_candidate_rules(seeker, job_post)
+                # Blend ML prediction with rule-based score for stability
+                final = 0.6 * ml_score + 0.4 * rule_score
+                method = "ml_blend"
+            except Exception as e:
+                # ML prediction failed — fall back to rules silently
+                logger.error(f"ML prediction error, falling back to rules: {e}")
+                final = score_candidate_rules(seeker, job_post)
+                method = "rules_only_after_ml_error"
         else:
             final  = score_candidate_rules(seeker, job_post)
             method = "rules_only"
 
-        # Convert the Pydantic model to a dict, then unpack
-        seeker_dict = seeker.model_dump()
-        scored.append(RankedCandidate(
-            **seeker_dict,
-            match_score=round(final, 4),
-            method=method
-        ))
+        try:
+            # Convert the Pydantic model to a dict, then unpack
+            seeker_dict = seeker.model_dump()
+            scored.append(RankedCandidate(
+                **seeker_dict,
+                match_score=round(final, 4),
+                method=method
+            ))
+        except Exception as e:
+            logger.error(f"Failed to build RankedCandidate for seeker {getattr(seeker, 'id', 'unknown')}: {e}")
+            continue
 
     ranked = sorted(scored, key=lambda x: x.match_score, reverse=True)
 
@@ -79,10 +91,21 @@ def rank_candidates(job_post: JobPost, candidate_pool: list[Seeker], trader_id: 
 def record_match_outcome(seeker: Seeker, job_post: JobPost, outcome: bool) -> dict:
     """ Feed a completed match outcome back into the River model so rankings improve over time """
     global total_matches_learned
+    
+    try:
+        features = extract_match_features(seeker, job_post)
+        match_model.learn_one(features, outcome)
+        total_matches_learned += 1
 
-    features = extract_match_features(seeker, job_post)
-    match_model.learn_one(features, outcome)
-    total_matches_learned += 1
+    except Exception as e:
+        # Log but do not crash — a failed learn is better than a failed endpoint
+        logger.error(f"match_model.learn_one failed: {e}")
+        return {
+            "status": "learn_failed",
+            "total_matches_learned": total_matches_learned,
+            "ml_active": total_matches_learned >= 50,
+            "error": str(e)
+        }
 
     return {
         "status":               "learned",

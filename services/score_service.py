@@ -26,7 +26,11 @@ def compute_trend_score(daily_revenues: list) -> float:
         return 0.5
 
     x = np.arange(len(weekly_avgs))
-    slope, _ = np.polyfit(x, weekly_avgs, 1)
+
+    try:
+        slope, _ = np.polyfit(x, weekly_avgs, 1)
+    except np.linalg.LinAlgError:
+        return 0.5
 
     avg_weekly = np.mean(weekly_avgs)
     if avg_weekly == 0:
@@ -65,6 +69,18 @@ def compute_everiscore(
             "annualised_turnover": None,
             "signals": None
         }
+
+        if not daily_revenues:
+            return {
+                "trader_id": trader_id,
+                "eligible": False,
+                "ineligible_reason": "No revenue data despite sufficient days tracked",
+                "everiscore": None,
+                "tier": "INELIGIBLE",
+                "tax_status": None,
+                "annualised_turnover": None,
+                "signals": None
+            }
 
     volatility_score = compute_volatility_score(daily_revenues)
     trend_score = compute_trend_score(daily_revenues)

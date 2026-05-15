@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from auth.api_key import verify_api_key
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
+from logger import logger
 
 from models import (
     ScoreRequest, ScoreResponse,
@@ -44,48 +45,65 @@ def health_check():
 
 @app.post("/score", response_model=ScoreResponse, dependencies=[Depends(verify_api_key)])
 def compute_score(request: ScoreRequest):
-    result = score_service.compute_everiscore(
-        trader_id=request.trader_id,
-        daily_revenues=request.daily_revenues,
-        total_revenue=request.total_revenue,
-        total_cogs=request.total_cogs,
-        total_expenses=request.total_expenses,
-        consistency_ratio=request.consistency_ratio,
-        days_tracked=request.days_tracked
-    )
-    return ScoreResponse(**result)
+    try:
+        result = score_service.compute_everiscore(
+            trader_id=request.trader_id,
+            daily_revenues=request.daily_revenues,
+            total_revenue=request.total_revenue,
+            total_cogs=request.total_cogs,
+            total_expenses=request.total_expenses,
+            consistency_ratio=request.consistency_ratio,
+            days_tracked=request.days_tracked
+        )
+        return ScoreResponse(**result)
+    except Exception as e:
+        logger.error(f"Score computation error for trader {request.trader_id}: {e}")
+        raise HTTPException(status_code=500, detail="Score computation failed")
 
 @app.post("/fraud-check", response_model=FraudCheckResponse, dependencies=[Depends(verify_api_key)])
 def check_fraud(request: FraudCheckRequest):
-    # 1. Revenue Spike Detection
-    spike_result = fraud_service.detect_revenue_anomaly(request.daily_revenues)
-    
-    # 2. Expense Ratio Anomaly
-    expense_result = fraud_service.check_expense_anomaly(
-        total_revenue=request.total_revenue,
-        total_expenses=request.total_expenses,
-        category=request.trader_category
-    )
-    
-    # 3. Timestamp Integrity
-    integrity_result = fraud_service.check_timestamp_integrity(request.upload_history)
-    
-    # 4. Digital Velocity Triangulation (Squad + Mono)
-    digital_result = fraud_service.check_velocity_triangulation(
-        notebook_revenue_daily_avg=request.notebook_revenue_daily_avg,
-        squad_credit_daily_avg=request.squad_credit_daily_avg,
-        mono_credit_daily_avg=request.mono_credit_daily_avg,
-        days_with_squad_data=request.days_with_squad_data,
-        days_with_mono_data=request.days_with_mono_data
-    )
-    
-    # Compute Final Multiplier
-    multiplier = fraud_service.compute_penalty_multiplier(
-        spike_result=spike_result,
-        expense_result=expense_result,
-        integrity_result=integrity_result,
-        squad_result=digital_result
-    )
+    try:
+        # 1. Revenue Spike Detection
+        spike_result = fraud_service.detect_revenue_anomaly(request.daily_revenues)
+        
+        # 2. Expense Ratio Anomaly
+        expense_result = fraud_service.check_expense_anomaly(
+            total_revenue=request.total_revenue,
+            total_expenses=request.total_expenses,
+            category=request.trader_category
+        )
+        
+        # 3. Timestamp Integrity
+        integrity_result = fraud_service.check_timestamp_integrity(request.upload_history)
+        
+        # 4. Digital Velocity Triangulation (Squad + Mono)
+        digital_result = fraud_service.check_velocity_triangulation(
+            notebook_revenue_daily_avg=request.notebook_revenue_daily_avg,
+            squad_credit_daily_avg=request.squad_credit_daily_avg,
+            mono_credit_daily_avg=request.mono_credit_daily_avg,
+            days_with_squad_data=request.days_with_squad_data,
+            days_with_mono_data=request.days_with_mono_data
+        )
+        
+        # Compute Final Multiplier
+        multiplier = fraud_service.compute_penalty_multiplier(
+            spike_result=spike_result,
+            expense_result=expense_result,
+            integrity_result=integrity_result,
+            squad_result=digital_result
+        )
+    except Exception as e:
+        logger.error(f"Fraud check error for trader {request.trader_id}: {e}")
+        # Fail open — return no penalty rather than blocking the trader
+        return FraudCheckResponse(
+            trader_id=request.trader_id,
+            fraud_flags=[],
+            expense_anomaly=False,
+            expense_flag="ok",
+            flag_count=0,
+            integrity_score=1.0,
+            penalty_multiplier=1.0
+        )
     
     # Assemble Fraud Flags
     flags = []
@@ -106,9 +124,15 @@ def check_fraud(request: FraudCheckRequest):
             "anomaly_score": digital_result.get("deviation")
         })
         
+    try:
+        fraud_flags = [FraudFlag(**f) for f in flags]
+    except Exception as e:
+        logger.error(f"FraudFlag construction error: {e}")
+        fraud_flags = []
+
     return FraudCheckResponse(
         trader_id=request.trader_id,
-        fraud_flags=[FraudFlag(**f) for f in flags],
+        fraud_flags=fraud_flags,
         expense_anomaly=expense_result.get("anomaly", False),
         expense_flag=expense_result.get("flag", "ok"),
         flag_count=len(flags) + (1 if expense_result.get("anomaly") else 0),
@@ -123,11 +147,17 @@ def get_baselines():
 
 @app.post("/baselines", response_model=dict, dependencies=[Depends(verify_api_key)])
 def restore_baselines(request: BaselineDumpResponse):
-    """Restores River baselines from Node.js on startup."""
-    state_list = [s.model_dump() for s in request.baselines]
-    repo.restore_state(state_list)
-    return {"status": "ok", "message": "Baselines restored successfully."}
-
+    try:
+        state_list = [s.model_dump() for s in request.baselines]
+        repo.restore_state(state_list)
+        return {"status": "ok", "message": "Baselines restored successfully."}
+    except Exception as e:
+        print(f"Baseline restore failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Baseline restore failed — service will start with fresh baselines"
+        )
+        
 @app.post("/match", response_model=MatchResponse, dependencies=[Depends(verify_api_key)])
 def match_candidates(request: MatchRequest):
     result = match_service.rank_candidates(
