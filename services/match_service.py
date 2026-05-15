@@ -77,6 +77,7 @@ def rank_candidates(job_post: JobPost, candidate_pool: list[Seeker], trader_id: 
     }
 
 def record_match_outcome(seeker: Seeker, job_post: JobPost, outcome: bool) -> dict:
+    """ Feed a completed match outcome back into the River model so rankings improve over time """
     global total_matches_learned
 
     features = extract_match_features(seeker, job_post)

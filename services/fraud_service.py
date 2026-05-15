@@ -1,3 +1,4 @@
+from logger import logger
 from sklearn.ensemble import IsolationForest
 import numpy as np
 from datetime import datetime
@@ -40,41 +41,61 @@ def detect_revenue_anomaly(daily_revenues: list) -> dict:
             "method": "zscore_fallback"
         }
 
-    arr = np.array(daily_revenues).reshape(-1, 1)
-    model = IsolationForest(contamination=0.05, random_state=42)
-    model.fit(arr)
+    try:
+        arr = np.array(daily_revenues).reshape(-1, 1)
+        model = IsolationForest(contamination=0.05, random_state=42)
+        model.fit(arr)
 
-    predictions = model.predict(arr)
-    scores = model.decision_function(arr)
+        predictions = model.predict(arr)
+        scores = model.decision_function(arr)
 
-    latest_anomaly = predictions[-1] == -1
+        latest_anomaly = predictions[-1] == -1
 
-    return {
-        "anomaly": bool(latest_anomaly),
-        "anomaly_score": round(float(scores[-1]), 3),
-        "severity": "HIGH" if scores[-1] < -0.15 else "MEDIUM",
-        "method": "isolation_forest"
-    }
+        return {
+            "anomaly": bool(latest_anomaly),
+            "anomaly_score": round(float(scores[-1]), 3),
+            "severity": "HIGH" if scores[-1] < -0.15 else "MEDIUM",
+            "method": "isolation_forest"
+        }
+    except Exception as e:
+        # if Isolation Forest doesn't work, fall back to Z-Score
+        logger.error(f"IsolationForest error, falling back to zscore: {e}")
+        arr = np.array(daily_revenues)
+        mean_baseline = np.mean(arr[:-1])
+        std_baseline = np.std(arr[:-1])
+        if std_baseline == 0:
+            return {"anomaly": False, "method": "zscore_fallback_after_if_error"}
+        z_score = (arr[-1] - mean_baseline) / std_baseline
+        return {
+            "anomaly": bool(z_score > 3.0),
+            "z_score": round(float(z_score), 2),
+            "method": "zscore_fallback_after_if_error"
+        }
 
 def check_expense_anomaly(total_revenue: float, total_expenses: float, category: str = "general_trade") -> dict:
     if total_revenue == 0:
         return {"anomaly": False, "reason": "zero_revenue"}
 
     category = normalise_category(category)
-
     expense_ratio = total_expenses / total_revenue
     
-    # Update the baseline immediately
-    repo.update_baseline(category, expense_ratio)
-    
-    # Get current stats
-    b = repo.get_baseline(category)
-    mean = b["mean"].get()
-    variance = b["var"].get()
+    try:
+        repo.update_baseline(category, expense_ratio)
+        b = repo.get_baseline(category)
+        mean = b["mean"].get()
+        variance = b["var"].get()
+    except Exception as e:
+        # Baseline unavailable — skip anomaly check, do not penalise
+        logger.warning(f"Baseline repo error for category {category}: {e}")
+        return {
+            "anomaly": False,
+            "reason": "baseline_unavailable",
+            "expense_ratio": round(expense_ratio, 3)
+        }
 
     if variance is None or variance == 0:
         return {
-            "anomaly": False, 
+            "anomaly": False,
             "reason": "insufficient_baseline_data",
             "expense_ratio": round(expense_ratio, 3)
         }
@@ -234,18 +255,22 @@ def check_velocity_triangulation(
             }
         }
     else:
+        # Covers both negative deviation (digital exceeds notebook — not fraud,
+        # trader may have income sources not recorded in the notebook) and
+        # deviation between 0 and 0.70 (within acceptable cash trading range)
         return {
             "checked": True,
             "deviation": round(deviation, 3),
             "anomaly": False,
             "penalty": 1.0,
+            "notes": "digital_exceeds_notebook" if deviation < 0 else "within_acceptable_range",
             "combined_digital_avg": round(combined_digital_avg, 2),
             "sources_used": {
                 "squad": squad_credit_daily_avg > 0,
                 "mono": mono_credit_daily_avg > 0
             }
         }
-        
+
 def compute_penalty_multiplier(spike_result: dict, expense_result: dict, integrity_result: dict, squad_result: dict = None) -> float:
     multiplier = 1.0
 
@@ -255,7 +280,7 @@ def compute_penalty_multiplier(spike_result: dict, expense_result: dict, integri
     if expense_result.get("anomaly"):
         multiplier *= 0.60
 
-    multiplier *= integrity_result["integrity_score"]
+    multiplier *= integrity_result.get("integrity_score", 1)
     
     if squad_result and squad_result.get("checked"):
         multiplier *= squad_result.get("penalty", 1.0)
