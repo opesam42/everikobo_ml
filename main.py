@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Depends
 from auth.api_key import verify_api_key
 from fastapi.middleware.cors import CORSMiddleware
@@ -157,7 +160,7 @@ def restore_baselines(request: BaselineDumpResponse):
             status_code=500,
             detail="Baseline restore failed — service will start with fresh baselines"
         )
-        
+
 @app.post("/match", response_model=MatchResponse, dependencies=[Depends(verify_api_key)])
 def match_candidates(request: MatchRequest):
     result = match_service.rank_candidates(
