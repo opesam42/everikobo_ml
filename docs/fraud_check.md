@@ -283,26 +283,56 @@ def check_timestamp_integrity(upload_history: list, trader: dict) -> dict:
 
 ---
 
-## Check 4 — Squad Velocity Triangulation
+## Check 4 — Digital Velocity Triangulation (Squad + Mono)
 
-Cross-references self-reported notebook data with actual digital payments received via Squad to detect upward notebook inflation.
+Cross-references self-reported notebook data with actual digital payments received via Squad and Mono Open Banking to detect upward notebook inflation.
 
 ```python
-def check_squad_velocity_triangulation(notebook_revenue_daily_avg: float, squad_credit_daily_avg: float, days_with_squad_data: int) -> dict:
-    if days_with_squad_data < 7:
-        return {"checked": False, "reason": "insufficient_squad_history", "penalty": 1.0}
+def check_velocity_triangulation(
+    notebook_revenue_daily_avg: float,
+    squad_credit_daily_avg: float,
+    mono_credit_daily_avg: float,
+    days_with_squad_data: int,
+    days_with_mono_data: int
+) -> dict:
+
+    combined_digital_avg = squad_credit_daily_avg + mono_credit_daily_avg
+    total_days = max(days_with_squad_data, days_with_mono_data)
+
+    if total_days < 7:
+        return {
+            "checked": False,
+            "reason": "insufficient_digital_history",
+            "penalty": 1.0,
+            "sources_available": {"squad": days_with_squad_data > 0, "mono": days_with_mono_data > 0}
+        }
 
     if notebook_revenue_daily_avg == 0:
         return {"checked": False, "reason": "zero_notebook_revenue", "penalty": 1.0}
 
-    deviation = (notebook_revenue_daily_avg - squad_credit_daily_avg) / notebook_revenue_daily_avg
+    deviation = (notebook_revenue_daily_avg - combined_digital_avg) / notebook_revenue_daily_avg
 
     if deviation > 0.85:
-        return {"checked": True, "deviation": round(deviation, 3), "anomaly": True, "severity": "HIGH", "penalty": 0.70}
+        return {
+            "checked": True, "deviation": round(deviation, 3), "anomaly": True,
+            "severity": "HIGH", "penalty": 0.70,
+            "combined_digital_avg": round(combined_digital_avg, 2),
+            "sources_used": {"squad": squad_credit_daily_avg > 0, "mono": mono_credit_daily_avg > 0}
+        }
     elif deviation > 0.70:
-        return {"checked": True, "deviation": round(deviation, 3), "anomaly": True, "severity": "MEDIUM", "penalty": 0.85}
+        return {
+            "checked": True, "deviation": round(deviation, 3), "anomaly": True,
+            "severity": "MEDIUM", "penalty": 0.85,
+            "combined_digital_avg": round(combined_digital_avg, 2),
+            "sources_used": {"squad": squad_credit_daily_avg > 0, "mono": mono_credit_daily_avg > 0}
+        }
     else:
-        return {"checked": True, "deviation": round(deviation, 3), "anomaly": False, "penalty": 1.0}
+        return {
+            "checked": True, "deviation": round(deviation, 3), "anomaly": False,
+            "penalty": 1.0,
+            "combined_digital_avg": round(combined_digital_avg, 2),
+            "sources_used": {"squad": squad_credit_daily_avg > 0, "mono": mono_credit_daily_avg > 0}
+        }
 ```
 
 ---

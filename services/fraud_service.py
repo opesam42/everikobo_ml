@@ -173,43 +173,52 @@ def check_timestamp_integrity(upload_history: list) -> dict:
         "passed": len(flags) == 0
     }
 
-def check_squad_velocity_triangulation(
+def check_velocity_triangulation(
     notebook_revenue_daily_avg: float,
     squad_credit_daily_avg: float,
-    days_with_squad_data: int
+    mono_credit_daily_avg: float,
+    days_with_squad_data: int,
+    days_with_mono_data: int
 ) -> dict:
 
-    # Need at least 7 days of Squad data to make a meaningful comparison.
-    # Before that, skip the check entirely — do not penalise traders
-    # who have just started using digital payments.
-    if days_with_squad_data < 7:
+    # Combine both digital sources into one total digital daily average.
+    # Squad captures payments made through EveriKobo specifically.
+    # Mono captures all pre-existing bank account inflows from any source.
+    # Together they give the most complete picture of verified digital revenue.
+    combined_digital_avg = squad_credit_daily_avg + mono_credit_daily_avg
+    total_days = max(days_with_squad_data, days_with_mono_data)
+
+    # Need at least 7 days from either source to make a meaningful comparison.
+    if total_days < 7:
         return {
             "checked": False,
-            "reason": "insufficient_squad_history",
-            "penalty": 1.0
+            "reason": "insufficient_digital_history",
+            "penalty": 1.0,
+            "sources_available": {
+                "squad": days_with_squad_data > 0,
+                "mono": days_with_mono_data > 0
+            }
         }
 
     if notebook_revenue_daily_avg == 0:
         return {"checked": False, "reason": "zero_notebook_revenue", "penalty": 1.0}
 
-    # Deviation: how far does Squad data diverge from notebook claims?
-    # We expect Squad to be LOWER than notebook because most informal
-    # traders still receive significant cash — not every naira goes
-    # through digital rails. So we only flag upward notebook inflation.
-    deviation = (notebook_revenue_daily_avg - squad_credit_daily_avg) / notebook_revenue_daily_avg
+    # Deviation: how far does combined digital data diverge from notebook claims?
+    deviation = (notebook_revenue_daily_avg - combined_digital_avg) \
+                / notebook_revenue_daily_avg
 
-    # A trader recording ₦20,000 in their notebook but only receiving
-    # ₦2,000 through Squad has a 90% deviation. That is suspicious.
-    # We set the threshold at 85% because we expect some cash sales.
-    # Below 85% deviation means Squad adoption is reasonable for
-    # the informal market context.
     if deviation > 0.85:
         return {
             "checked": True,
             "deviation": round(deviation, 3),
             "anomaly": True,
             "severity": "HIGH",
-            "penalty": 0.70  # 30% penalty — less severe than revenue spike
+            "penalty": 0.70,
+            "combined_digital_avg": round(combined_digital_avg, 2),
+            "sources_used": {
+                "squad": squad_credit_daily_avg > 0,
+                "mono": mono_credit_daily_avg > 0
+            }
         }
     elif deviation > 0.70:
         return {
@@ -217,16 +226,26 @@ def check_squad_velocity_triangulation(
             "deviation": round(deviation, 3),
             "anomaly": True,
             "severity": "MEDIUM",
-            "penalty": 0.85
+            "penalty": 0.85,
+            "combined_digital_avg": round(combined_digital_avg, 2),
+            "sources_used": {
+                "squad": squad_credit_daily_avg > 0,
+                "mono": mono_credit_daily_avg > 0
+            }
         }
     else:
         return {
             "checked": True,
             "deviation": round(deviation, 3),
             "anomaly": False,
-            "penalty": 1.0  # No penalty — data is consistent
+            "penalty": 1.0,
+            "combined_digital_avg": round(combined_digital_avg, 2),
+            "sources_used": {
+                "squad": squad_credit_daily_avg > 0,
+                "mono": mono_credit_daily_avg > 0
+            }
         }
-
+        
 def compute_penalty_multiplier(spike_result: dict, expense_result: dict, integrity_result: dict, squad_result: dict = None) -> float:
     multiplier = 1.0
 

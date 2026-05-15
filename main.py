@@ -70,11 +70,13 @@ def check_fraud(request: FraudCheckRequest):
     # 3. Timestamp Integrity
     integrity_result = fraud_service.check_timestamp_integrity(request.upload_history)
     
-    # 4. Squad Velocity Triangulation
-    squad_result = fraud_service.check_squad_velocity_triangulation(
+    # 4. Digital Velocity Triangulation (Squad + Mono)
+    digital_result = fraud_service.check_velocity_triangulation(
         notebook_revenue_daily_avg=request.notebook_revenue_daily_avg,
         squad_credit_daily_avg=request.squad_credit_daily_avg,
-        days_with_squad_data=request.days_with_squad_data
+        mono_credit_daily_avg=request.mono_credit_daily_avg,
+        days_with_squad_data=request.days_with_squad_data,
+        days_with_mono_data=request.days_with_mono_data
     )
     
     # Compute Final Multiplier
@@ -82,7 +84,7 @@ def check_fraud(request: FraudCheckRequest):
         spike_result=spike_result,
         expense_result=expense_result,
         integrity_result=integrity_result,
-        squad_result=squad_result
+        squad_result=digital_result
     )
     
     # Assemble Fraud Flags
@@ -97,11 +99,11 @@ def check_fraud(request: FraudCheckRequest):
     for f in integrity_result.get("flags", []):
         flags.append(f)
         
-    if squad_result.get("anomaly"):
+    if digital_result.get("anomaly"):
         flags.append({
-            "type": "squad_inflation",
-            "severity": squad_result.get("severity", "MEDIUM"),
-            "anomaly_score": squad_result.get("deviation")
+            "type": "digital_inflation",
+            "severity": digital_result.get("severity", "MEDIUM"),
+            "anomaly_score": digital_result.get("deviation")
         })
         
     return FraudCheckResponse(
