@@ -34,7 +34,7 @@ endpoint — only what to send and what to do with what comes back.
 ## Setup
 
 ```bash
-pip install fastapi uvicorn numpy scikit-learn river python-dotenv
+pip install -r requirements.txt
 
 cp .env.example .env
 
@@ -43,7 +43,8 @@ uvicorn main:app --reload --port 8000
 
 ```bash
 # .env.example
-EVERIKOBO_API_KEY=your_shared_api_key_here
+EVERIKOBO_API_KEY=<EVERIKOBO_API_KEY>
+# Place any random key here — ensure it matches the Node.js backend's key.
 PORT=8000
 ```
 
@@ -51,7 +52,7 @@ PORT=8000
 # Node.js .env
 ML_SERVICE_URL=http://localhost:8000
 ML_SERVICE_URL=https://everikobo-ml-production.up.railway.app  # production
-EVERIKOBO_API_KEY=same_key_as_python_service
+EVERIKOBO_API_KEY=<EVERIKOBO_API_KEY>  # use the same key as the Python service
 ```
 
 ---
